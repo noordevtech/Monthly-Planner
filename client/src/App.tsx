@@ -3,10 +3,9 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Calendar, ListTodo, FileText, ArrowLeft, LogOut, Settings } from "lucide-react";
+import { Calendar, ListTodo, FileText, ArrowLeft, LogOut, Settings, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
-import AuthPage from "@/pages/AuthPage";
 import ClientsView from "@/pages/ClientsView";
 import CalendarView from "@/pages/CalendarView";
 import TasksView from "@/pages/TasksView";
@@ -14,6 +13,30 @@ import MonthlyReportsView from "@/pages/MonthlyReportsView";
 import SettingsView from "@/pages/SettingsView";
 import { useAuth } from "@/hooks/use-auth";
 import { type Client } from "@shared/schema";
+
+function LandingPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-md mx-4 text-center">
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <Calendar className="w-10 h-10 text-primary" />
+          <h1 className="text-3xl font-bold text-foreground">Work Calendar</h1>
+        </div>
+        <p className="text-muted-foreground mb-8 text-lg">
+          Manage your clients, track work hours, and generate AI-powered daily reports.
+        </p>
+        <a
+          href="/api/login"
+          data-testid="button-login"
+          className="inline-flex items-center gap-2 px-8 py-3 rounded-md bg-primary text-primary-foreground font-medium text-lg hover:bg-primary/90 transition-colors"
+        >
+          <KeyRound className="w-5 h-5" />
+          Sign In with Replit
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function ClientNavBar({ clientId }: { clientId: number }) {
   const [location] = useLocation();
@@ -79,14 +102,25 @@ function TopBar() {
   const { user, logout } = useAuth();
   const [location] = useLocation();
 
+  const displayName = user?.firstName
+    ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`
+    : user?.email || "User";
+
   return (
     <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
       <Link href="/" className="text-sm font-semibold text-foreground hover:text-primary transition-colors">
         Work Calendar
       </Link>
       <div className="flex items-center gap-2">
+        {user?.profileImageUrl && (
+          <img
+            src={user.profileImageUrl}
+            alt=""
+            className="w-6 h-6 rounded-full"
+          />
+        )}
         <span data-testid="text-username" className="text-sm text-muted-foreground">
-          {user?.username}
+          {displayName}
         </span>
         <Link
           href="/settings"
@@ -102,8 +136,7 @@ function TopBar() {
           data-testid="button-logout"
           size="sm"
           variant="ghost"
-          onClick={() => logout.mutate()}
-          disabled={logout.isPending}
+          onClick={logout}
         >
           <LogOut className="w-4 h-4 mr-1" />
           Sign Out
@@ -177,7 +210,7 @@ function AppRouter() {
   }
 
   if (!user) {
-    return <AuthPage />;
+    return <LandingPage />;
   }
 
   return <AuthenticatedApp />;

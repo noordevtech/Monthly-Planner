@@ -1,16 +1,25 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Plus, Trash2, Users, Pencil } from "lucide-react";
+import { Plus, Trash2, Users, Pencil, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { type Client } from "@shared/schema";
 
+const LANGUAGES = [
+  "English", "French", "Spanish", "Portuguese", "German",
+  "Italian", "Dutch", "Arabic", "Chinese", "Japanese",
+  "Korean", "Russian", "Turkish", "Hindi", "Polish",
+  "Swedish", "Norwegian", "Danish", "Finnish", "Czech",
+];
+
 export default function ClientsView() {
   const [newName, setNewName] = useState("");
+  const [newLanguage, setNewLanguage] = useState("English");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
+  const [editLanguage, setEditLanguage] = useState("English");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -25,13 +34,14 @@ export default function ClientsView() {
   });
 
   const createClient = useMutation({
-    mutationFn: async (name: string) => {
-      const res = await apiRequest("POST", "/api/clients", { name });
+    mutationFn: async (data: { name: string; language: string }) => {
+      const res = await apiRequest("POST", "/api/clients", data);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       setNewName("");
+      setNewLanguage("English");
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -39,8 +49,8 @@ export default function ClientsView() {
   });
 
   const updateClient = useMutation({
-    mutationFn: async ({ id, name }: { id: number; name: string }) => {
-      const res = await apiRequest("PATCH", `/api/clients/${id}`, { name });
+    mutationFn: async ({ id, name, language }: { id: number; name: string; language: string }) => {
+      const res = await apiRequest("PATCH", `/api/clients/${id}`, { name, language });
       return res.json();
     },
     onSuccess: () => {
@@ -68,13 +78,13 @@ export default function ClientsView() {
     e.preventDefault();
     const name = newName.trim();
     if (!name) return;
-    createClient.mutate(name);
+    createClient.mutate({ name, language: newLanguage });
   };
 
   const handleSaveEdit = (id: number) => {
     const name = editName.trim();
     if (!name) return;
-    updateClient.mutate({ id, name });
+    updateClient.mutate({ id, name, language: editLanguage });
   };
 
   return (
@@ -93,9 +103,19 @@ export default function ClientsView() {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Add a new client..."
+            placeholder="Client name..."
             className="flex-1 px-4 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
+          <select
+            data-testid="select-new-language"
+            value={newLanguage}
+            onChange={(e) => setNewLanguage(e.target.value)}
+            className="px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang} value={lang}>{lang}</option>
+            ))}
+          </select>
           <Button data-testid="button-add-client" type="submit" disabled={createClient.isPending || !newName.trim()}>
             <Plus className="w-4 h-4 mr-1" />
             Add
@@ -120,7 +140,7 @@ export default function ClientsView() {
               >
                 {editingId === client.id ? (
                   <form
-                    className="flex-1 flex gap-2"
+                    className="flex-1 flex gap-2 items-center"
                     onSubmit={(e) => { e.preventDefault(); handleSaveEdit(client.id); }}
                   >
                     <input
@@ -131,6 +151,16 @@ export default function ClientsView() {
                       className="flex-1 px-3 py-1 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       autoFocus
                     />
+                    <select
+                      data-testid={`select-edit-language-${client.id}`}
+                      value={editLanguage}
+                      onChange={(e) => setEditLanguage(e.target.value)}
+                      className="px-2 py-1 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {LANGUAGES.map((lang) => (
+                        <option key={lang} value={lang}>{lang}</option>
+                      ))}
+                    </select>
                     <Button data-testid={`button-save-edit-${client.id}`} size="sm" type="submit">Save</Button>
                     <Button data-testid={`button-cancel-edit-${client.id}`} size="sm" variant="outline" type="button" onClick={() => setEditingId(null)}>Cancel</Button>
                   </form>
@@ -143,11 +173,18 @@ export default function ClientsView() {
                     >
                       {client.name}
                     </button>
+                    <span
+                      data-testid={`text-client-language-${client.id}`}
+                      className="flex items-center gap-1 text-xs text-muted-foreground px-2 py-1 rounded bg-muted"
+                    >
+                      <Globe className="w-3 h-3" />
+                      {client.language}
+                    </span>
                     <Button
                       data-testid={`button-edit-client-${client.id}`}
                       size="icon"
                       variant="ghost"
-                      onClick={() => { setEditingId(client.id); setEditName(client.name); }}
+                      onClick={() => { setEditingId(client.id); setEditName(client.name); setEditLanguage(client.language); }}
                     >
                       <Pencil className="w-4 h-4" />
                     </Button>

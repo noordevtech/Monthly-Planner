@@ -3,130 +3,33 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
-import session from "express-session";
-import bcrypt from "bcryptjs";
-import connectPgSimple from "connect-pg-simple";
-
-declare module "express-session" {
-  interface SessionData {
-    userId: number;
-  }
-}
-
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Not authenticated" });
-  }
-  next();
-}
+import { setupAuth, isAuthenticated, registerAuthRoutes } from "./replit_integrations/auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const PgStore = connectPgSimple(session);
+  await setupAuth(app);
+  registerAuthRoutes(app);
 
-  app.use(
-    session({
-      store: new PgStore({
-        conString: process.env.DATABASE_URL,
-        createTableIfMissing: true,
-      }),
-      secret: process.env.SESSION_SECRET || "fallback-secret-key",
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: false,
-        httpOnly: true,
-        maxAge: 30 * 24 * 60 * 60 * 1000,
-      },
-    })
-  );
+  // Settings route for OpenAI API key
+  app.get("/api/settings", isAuthenticated, async (req: any, res) => {
+    const userId = req.user?.claims?.sub;
+    const user = await storage.getUserById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ hasOpenaiKey: !!user.openaiApiKey });
+  });
 
-  // Auth routes
-  app.post("/api/auth/register", async (req, res) => {
+  app.patch("/api/settings", isAuthenticated, async (req: any, res) => {
     try {
-      const input = z.object({
-        username: z.string().min(3, "Username must be at least 3 characters"),
-        password: z.string().min(6, "Password must be at least 6 characters"),
-      }).parse(req.body);
-
-      const existing = await storage.getUserByUsername(input.username);
-      if (existing) {
-        return res.status(400).json({ message: "Username already taken" });
-      }
-
-      const hashedPassword = await bcrypt.hash(input.password, 10);
-      const user = await storage.createUser({
-        username: input.username,
-        password: hashedPassword,
-        openaiApiKey: null,
-      });
-
-      req.session.userId = user.id;
-      res.status(201).json({ id: user.id, username: user.username, hasOpenaiKey: !!user.openaiApiKey });
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
-      throw err;
-    }
-  });
-
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const input = z.object({
-        username: z.string().min(1),
-        password: z.string().min(1),
-      }).parse(req.body);
-
-      const user = await storage.getUserByUsername(input.username);
-      if (!user) {
-        return res.status(401).json({ message: "Invalid username or password" });
-      }
-
-      const valid = await bcrypt.compare(input.password, user.password);
-      if (!valid) {
-        return res.status(401).json({ message: "Invalid username or password" });
-      }
-
-      req.session.userId = user.id;
-      res.json({ id: user.id, username: user.username, hasOpenaiKey: !!user.openaiApiKey });
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
-      throw err;
-    }
-  });
-
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) return res.status(500).json({ message: "Failed to logout" });
-      res.json({ success: true });
-    });
-  });
-
-  app.get("/api/auth/me", async (req, res) => {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    const user = await storage.getUserById(req.session.userId);
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
-    res.json({ id: user.id, username: user.username, hasOpenaiKey: !!user.openaiApiKey });
-  });
-
-  app.patch("/api/auth/settings", requireAuth, async (req, res) => {
-    try {
+      const userId = req.user?.claims?.sub;
       const input = z.object({
         openaiApiKey: z.string().nullable(),
       }).parse(req.body);
 
-      const updated = await storage.updateUserOpenaiKey(req.session.userId!, input.openaiApiKey);
+      const updated = await storage.updateUserOpenaiKey(userId, input.openaiApiKey);
       if (!updated) return res.status(404).json({ message: "User not found" });
-      res.json({ id: updated.id, username: updated.username, hasOpenaiKey: !!updated.openaiApiKey });
+      res.json({ hasOpenaiKey: !!updated.openaiApiKey });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -135,25 +38,25 @@ export async function registerRoutes(
     }
   });
 
-  // All remaining routes require auth
-  app.use("/api/clients", requireAuth);
-
   // Clients routes
-  app.get("/api/clients", async (_req, res) => {
+  app.get("/api/clients", isAuthenticated, async (_req, res) => {
     const data = await storage.getClients();
     res.json(data);
   });
 
-  app.get("/api/clients/:id", async (req, res) => {
+  app.get("/api/clients/:id", isAuthenticated, async (req, res) => {
     const id = Number(req.params.id);
     const client = await storage.getClient(id);
     if (!client) return res.status(404).json({ message: "Client not found" });
     res.json(client);
   });
 
-  app.post("/api/clients", async (req, res) => {
+  app.post("/api/clients", isAuthenticated, async (req, res) => {
     try {
-      const input = z.object({ name: z.string().min(1) }).parse(req.body);
+      const input = z.object({
+        name: z.string().min(1),
+        language: z.string().min(1).default("English"),
+      }).parse(req.body);
       const result = await storage.createClient(input);
       res.status(201).json(result);
     } catch (err) {
@@ -164,10 +67,13 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/clients/:id", async (req, res) => {
+  app.patch("/api/clients/:id", isAuthenticated, async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const input = z.object({ name: z.string().min(1) }).parse(req.body);
+      const input = z.object({
+        name: z.string().min(1),
+        language: z.string().min(1).optional(),
+      }).parse(req.body);
       const result = await storage.updateClient(id, input);
       if (!result) return res.status(404).json({ message: "Client not found" });
       res.json(result);
@@ -179,7 +85,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/clients/:id", async (req, res) => {
+  app.delete("/api/clients/:id", isAuthenticated, async (req, res) => {
     const id = Number(req.params.id);
     const deleted = await storage.deleteClient(id);
     if (!deleted) return res.status(404).json({ message: "Client not found" });
@@ -187,7 +93,7 @@ export async function registerRoutes(
   });
 
   // Time slots routes (scoped by client)
-  app.get("/api/clients/:clientId/time-slots", async (req, res) => {
+  app.get("/api/clients/:clientId/time-slots", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -204,7 +110,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/clients/:clientId/time-slots", async (req, res) => {
+  app.post("/api/clients/:clientId/time-slots", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -223,7 +129,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/clients/:clientId/time-slots/:id", async (req, res) => {
+  app.delete("/api/clients/:clientId/time-slots/:id", isAuthenticated, async (req, res) => {
     const clientId = Number(req.params.clientId);
     const id = Number(req.params.id);
     if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
@@ -232,7 +138,7 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
-  app.post("/api/clients/:clientId/time-slots/bulk", async (req, res) => {
+  app.post("/api/clients/:clientId/time-slots/bulk", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -254,7 +160,7 @@ export async function registerRoutes(
   });
 
   // Tasks routes (scoped by client)
-  app.get("/api/clients/:clientId/tasks", async (req, res) => {
+  app.get("/api/clients/:clientId/tasks", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -271,7 +177,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/clients/:clientId/tasks", async (req, res) => {
+  app.post("/api/clients/:clientId/tasks", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -289,7 +195,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/clients/:clientId/tasks/:id", async (req, res) => {
+  app.patch("/api/clients/:clientId/tasks/:id", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       const id = Number(req.params.id);
@@ -309,7 +215,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/clients/:clientId/tasks/:id", async (req, res) => {
+  app.delete("/api/clients/:clientId/tasks/:id", isAuthenticated, async (req, res) => {
     const clientId = Number(req.params.clientId);
     const id = Number(req.params.id);
     if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
@@ -319,7 +225,7 @@ export async function registerRoutes(
   });
 
   // AI report generation (scoped by client)
-  app.post("/api/clients/:clientId/tasks/report", async (req, res) => {
+  app.post("/api/clients/:clientId/tasks/report", isAuthenticated, async (req: any, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -330,10 +236,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No tasks found for this date" });
       }
 
-      const user = await storage.getUserById(req.session.userId!);
+      const userId = req.user?.claims?.sub;
+      const user = await storage.getUserById(userId);
       if (!user?.openaiApiKey) {
         return res.status(400).json({ message: "Please add your OpenAI API key in Settings before generating reports" });
       }
+
+      const client = await storage.getClient(clientId);
+      const clientLanguage = client?.language || "English";
 
       const taskList = tasks.map(t => `- [${t.completed ? "DONE" : "PENDING"}] ${t.title}`).join("\n");
 
@@ -346,7 +256,7 @@ export async function registerRoutes(
         messages: [
           {
             role: "system",
-            content: "You are a professional work report writer. Given a list of tasks for a workday, write a concise daily work report summarizing what was accomplished and what remains. Keep it brief and professional, using 3-5 sentences.",
+            content: `You are a professional work report writer. Given a list of tasks for a workday, write a concise daily work report summarizing what was accomplished and what remains. Keep it brief and professional, using 3-5 sentences. IMPORTANT: Write the entire report in ${clientLanguage}.`,
           },
           {
             role: "user",
@@ -372,7 +282,7 @@ export async function registerRoutes(
   });
 
   // Reports routes (scoped by client)
-  app.get("/api/clients/:clientId/reports", async (req, res) => {
+  app.get("/api/clients/:clientId/reports", isAuthenticated, async (req, res) => {
     try {
       const clientId = Number(req.params.clientId);
       if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
@@ -389,7 +299,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/clients/:clientId/reports/:id", async (req, res) => {
+  app.delete("/api/clients/:clientId/reports/:id", isAuthenticated, async (req, res) => {
     const clientId = Number(req.params.clientId);
     const id = Number(req.params.id);
     if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });

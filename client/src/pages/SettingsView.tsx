@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
 export default function SettingsView() {
-  const { user, updateSettings } = useAuth();
+  const { hasOpenaiKey, updateSettings } = useAuth();
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -68,7 +68,7 @@ export default function SettingsView() {
             <div className="mb-4">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Status:</span>
-                {user?.hasOpenaiKey ? (
+                {hasOpenaiKey ? (
                   <span data-testid="text-key-status" className="flex items-center gap-1 text-green-600 font-medium">
                     <Check className="w-4 h-4" />
                     API key configured
@@ -88,7 +88,7 @@ export default function SettingsView() {
                   type={showKey ? "text" : "password"}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={user?.hasOpenaiKey ? "Enter new key to replace existing one..." : "sk-..."}
+                  placeholder={hasOpenaiKey ? "Enter new key to replace existing one..." : "sk-..."}
                   className="w-full px-4 py-2 pr-10 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
                 <button
@@ -109,9 +109,9 @@ export default function SettingsView() {
                   {updateSettings.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-1" />
                   ) : null}
-                  {user?.hasOpenaiKey ? "Update Key" : "Save Key"}
+                  {hasOpenaiKey ? "Update Key" : "Save Key"}
                 </Button>
-                {user?.hasOpenaiKey && (
+                {hasOpenaiKey && (
                   <Button
                     data-testid="button-remove-key"
                     type="button"

@@ -1,16 +1,14 @@
 import { db } from "./db";
-import { users, clients, timeSlots, tasks, reports, type User, type InsertUser, type Client, type InsertClient, type InsertTimeSlot, type TimeSlot, type InsertTask, type Task, type Report, type InsertReport } from "@shared/schema";
-import { eq, and, gte, lt, desc } from "drizzle-orm";
+import { users, clients, timeSlots, tasks, reports, type User, type Client, type InsertClient, type InsertTimeSlot, type TimeSlot, type InsertTask, type Task, type Report, type InsertReport } from "@shared/schema";
+import { eq, and, gte, lt } from "drizzle-orm";
 
 export interface IStorage {
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUserById(id: number): Promise<User | undefined>;
-  createUser(data: InsertUser): Promise<User>;
-  updateUserOpenaiKey(id: number, openaiApiKey: string | null): Promise<User | null>;
+  getUserById(id: string): Promise<User | undefined>;
+  updateUserOpenaiKey(id: string, openaiApiKey: string | null): Promise<User | null>;
   getClients(): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
   createClient(data: InsertClient): Promise<Client>;
-  updateClient(id: number, data: { name: string }): Promise<Client | null>;
+  updateClient(id: number, data: { name: string; language?: string }): Promise<Client | null>;
   deleteClient(id: number): Promise<boolean>;
   getTimeSlots(clientId: number, month?: string): Promise<TimeSlot[]>;
   createTimeSlot(data: InsertTimeSlot): Promise<TimeSlot>;
@@ -35,22 +33,12 @@ function monthRange(month: string) {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
-
-  async getUserById(id: number): Promise<User | undefined> {
+  async getUserById(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  async createUser(data: InsertUser): Promise<User> {
-    const [inserted] = await db.insert(users).values(data).returning();
-    return inserted;
-  }
-
-  async updateUserOpenaiKey(id: number, openaiApiKey: string | null): Promise<User | null> {
+  async updateUserOpenaiKey(id: string, openaiApiKey: string | null): Promise<User | null> {
     const result = await db.update(users).set({ openaiApiKey }).where(eq(users.id, id)).returning();
     return result.length > 0 ? result[0] : null;
   }
@@ -69,7 +57,7 @@ export class DatabaseStorage implements IStorage {
     return inserted;
   }
 
-  async updateClient(id: number, data: { name: string }): Promise<Client | null> {
+  async updateClient(id: number, data: { name: string; language?: string }): Promise<Client | null> {
     const result = await db.update(clients).set(data).where(eq(clients.id, id)).returning();
     return result.length > 0 ? result[0] : null;
   }
