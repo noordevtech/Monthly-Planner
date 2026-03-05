@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { timeSlots, tasks, type InsertTimeSlot, type TimeSlot, type InsertTask, type Task } from "@shared/schema";
-import { eq, and, gte, lt } from "drizzle-orm";
+import { timeSlots, tasks, reports, type InsertTimeSlot, type TimeSlot, type InsertTask, type Task, type Report, type InsertReport } from "@shared/schema";
+import { eq, and, gte, lt, desc } from "drizzle-orm";
 
 export interface IStorage {
   getTimeSlots(month?: string): Promise<TimeSlot[]>;
@@ -11,6 +11,9 @@ export interface IStorage {
   createTask(data: InsertTask): Promise<Task>;
   updateTask(id: number, updates: { title?: string; completed?: boolean }): Promise<Task | null>;
   deleteTask(id: number): Promise<boolean>;
+  getReports(month?: string): Promise<Report[]>;
+  createReport(data: InsertReport): Promise<Report>;
+  deleteReport(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -63,6 +66,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTask(id: number): Promise<boolean> {
     const result = await db.delete(tasks).where(eq(tasks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getReports(month?: string): Promise<Report[]> {
+    if (month) {
+      const startDate = `${month}-01`;
+      const [year, m] = month.split('-');
+      const nextMonth = parseInt(m) === 12 ? 1 : parseInt(m) + 1;
+      const nextYear = parseInt(m) === 12 ? parseInt(year) + 1 : parseInt(year);
+      const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
+      return await db.select().from(reports)
+        .where(and(gte(reports.date, startDate), lt(reports.date, endDate)))
+        .orderBy(reports.date);
+    }
+    return await db.select().from(reports).orderBy(reports.date);
+  }
+
+  async createReport(data: InsertReport): Promise<Report> {
+    const [inserted] = await db.insert(reports).values(data).returning();
+    return inserted;
+  }
+
+  async deleteReport(id: number): Promise<boolean> {
+    const result = await db.delete(reports).where(eq(reports.id, id)).returning();
     return result.length > 0;
   }
 }

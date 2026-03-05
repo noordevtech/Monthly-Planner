@@ -105,7 +105,7 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
-  // AI report generation
+  // AI report generation (generates and saves to DB)
   app.post("/api/tasks/report", async (req, res) => {
     try {
       const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.body);
@@ -137,8 +137,9 @@ export async function registerRoutes(
         max_tokens: 500,
       });
 
-      const report = completion.choices[0]?.message?.content || "Unable to generate report.";
-      res.json({ report });
+      const reportContent = completion.choices[0]?.message?.content || "Unable to generate report.";
+      const saved = await storage.createReport({ date, content: reportContent });
+      res.json({ report: reportContent, saved });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -146,6 +147,29 @@ export async function registerRoutes(
       console.error("Error generating report:", err);
       res.status(500).json({ message: "Failed to generate report" });
     }
+  });
+
+  // Reports routes
+  app.get("/api/reports", async (req, res) => {
+    try {
+      const input = z.object({
+        month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM").optional(),
+      }).parse(req.query);
+      const data = await storage.getReports(input.month);
+      res.json(data);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/reports/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const deleted = await storage.deleteReport(id);
+    if (!deleted) return res.status(404).json({ message: "Report not found" });
+    res.json({ success: true });
   });
 
   // Seed time slots on first run

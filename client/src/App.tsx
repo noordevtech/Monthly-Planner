@@ -3,10 +3,11 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Calendar, ListTodo } from "lucide-react";
+import { Calendar, ListTodo, FileText } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import CalendarView from "@/pages/CalendarView";
 import TasksView from "@/pages/TasksView";
+import MonthlyReportsView from "@/pages/MonthlyReportsView";
 
 function NavBar() {
   const [location] = useLocation();
@@ -33,6 +34,16 @@ function NavBar() {
         <ListTodo className="w-4 h-4" />
         Tasks
       </Link>
+      <Link
+        href="/reports"
+        data-testid="link-reports"
+        className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          location === "/reports" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+        }`}
+      >
+        <FileText className="w-4 h-4" />
+        Reports
+      </Link>
     </nav>
   );
 }
@@ -42,6 +53,7 @@ function Router() {
     <Switch>
       <Route path="/" component={CalendarView} />
       <Route path="/tasks" component={TasksView} />
+      <Route path="/reports" component={MonthlyReportsView} />
       <Route component={NotFound} />
     </Switch>
   );

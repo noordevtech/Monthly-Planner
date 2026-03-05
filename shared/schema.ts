@@ -17,6 +17,13 @@ export const tasks = pgTable("tasks", {
   completed: boolean("completed").notNull().default(false),
 });
 
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -33,8 +40,11 @@ export const messages = pgTable("messages", {
 
 export const insertTimeSlotSchema = createInsertSchema(timeSlots).omit({ id: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
+export const insertReportSchema = createInsertSchema(reports).omit({ id: true, createdAt: true });
 
 export type InsertTimeSlot = z.infer<typeof insertTimeSlotSchema>;
 export type TimeSlot = typeof timeSlots.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
+export type Report = typeof reports.$inferSelect;
+export type InsertReport = z.infer<typeof insertReportSchema>;

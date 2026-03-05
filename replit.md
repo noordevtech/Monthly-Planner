@@ -23,7 +23,9 @@ Preferred communication style: Simple, everyday language.
 - **Path Aliases**: `@/` maps to `client/src/`, `@shared/` maps to `shared/`
 
 **Key pages/components:**
-- `client/src/pages/CalendarView.tsx` — main calendar grid, month navigation, slot grouping by date
+- `client/src/pages/CalendarView.tsx` — main calendar grid, month navigation, slot grouping by date, PDF export
+- `client/src/pages/TasksView.tsx` — daily tasks CRUD, AI report generation per day
+- `client/src/pages/MonthlyReportsView.tsx` — monthly reports list, per-report download, full monthly PDF (calendar + all reports)
 - `client/src/components/CalendarDay.tsx` — individual day cell showing date number and time slot chips
 - `client/src/components/WorkHourDialog.tsx` — modal for adding/editing slots for a selected day
 
