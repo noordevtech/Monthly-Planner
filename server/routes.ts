@@ -1,13 +1,143 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
+import session from "express-session";
+import bcrypt from "bcryptjs";
+import connectPgSimple from "connect-pg-simple";
+
+declare module "express-session" {
+  interface SessionData {
+    userId: number;
+  }
+}
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  next();
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const PgStore = connectPgSimple(session);
+
+  app.use(
+    session({
+      store: new PgStore({
+        conString: process.env.DATABASE_URL,
+        createTableIfMissing: true,
+      }),
+      secret: process.env.SESSION_SECRET || "fallback-secret-key",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: false,
+        httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      },
+    })
+  );
+
+  // Auth routes
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const input = z.object({
+        username: z.string().min(3, "Username must be at least 3 characters"),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+      }).parse(req.body);
+
+      const existing = await storage.getUserByUsername(input.username);
+      if (existing) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+
+      const hashedPassword = await bcrypt.hash(input.password, 10);
+      const user = await storage.createUser({
+        username: input.username,
+        password: hashedPassword,
+        openaiApiKey: null,
+      });
+
+      req.session.userId = user.id;
+      res.status(201).json({ id: user.id, username: user.username, hasOpenaiKey: !!user.openaiApiKey });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const input = z.object({
+        username: z.string().min(1),
+        password: z.string().min(1),
+      }).parse(req.body);
+
+      const user = await storage.getUserByUsername(input.username);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      const valid = await bcrypt.compare(input.password, user.password);
+      if (!valid) {
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      req.session.userId = user.id;
+      res.json({ id: user.id, username: user.username, hasOpenaiKey: !!user.openaiApiKey });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) return res.status(500).json({ message: "Failed to logout" });
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    res.json({ id: user.id, username: user.username, hasOpenaiKey: !!user.openaiApiKey });
+  });
+
+  app.patch("/api/auth/settings", requireAuth, async (req, res) => {
+    try {
+      const input = z.object({
+        openaiApiKey: z.string().nullable(),
+      }).parse(req.body);
+
+      const updated = await storage.updateUserOpenaiKey(req.session.userId!, input.openaiApiKey);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json({ id: updated.id, username: updated.username, hasOpenaiKey: !!updated.openaiApiKey });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  // All remaining routes require auth
+  app.use("/api/clients", requireAuth);
+
   // Clients routes
   app.get("/api/clients", async (_req, res) => {
     const data = await storage.getClients();
@@ -200,11 +330,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No tasks found for this date" });
       }
 
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user?.openaiApiKey) {
+        return res.status(400).json({ message: "Please add your OpenAI API key in Settings before generating reports" });
+      }
+
       const taskList = tasks.map(t => `- [${t.completed ? "DONE" : "PENDING"}] ${t.title}`).join("\n");
 
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: user.openaiApiKey,
       });
 
       const completion = await openai.chat.completions.create({
@@ -230,7 +364,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0].message });
       }
       console.error("Error generating report:", err);
-      res.status(500).json({ message: "Failed to generate report" });
+      const message = err instanceof Error && err.message.includes("API key")
+        ? "Invalid OpenAI API key. Please check your key in Settings."
+        : "Failed to generate report";
+      res.status(500).json({ message });
     }
   });
 

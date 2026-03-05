@@ -1,8 +1,12 @@
 import { db } from "./db";
-import { clients, timeSlots, tasks, reports, type Client, type InsertClient, type InsertTimeSlot, type TimeSlot, type InsertTask, type Task, type Report, type InsertReport } from "@shared/schema";
+import { users, clients, timeSlots, tasks, reports, type User, type InsertUser, type Client, type InsertClient, type InsertTimeSlot, type TimeSlot, type InsertTask, type Task, type Report, type InsertReport } from "@shared/schema";
 import { eq, and, gte, lt, desc } from "drizzle-orm";
 
 export interface IStorage {
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
+  createUser(data: InsertUser): Promise<User>;
+  updateUserOpenaiKey(id: number, openaiApiKey: string | null): Promise<User | null>;
   getClients(): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
   createClient(data: InsertClient): Promise<Client>;
@@ -31,6 +35,26 @@ function monthRange(month: string) {
 }
 
 export class DatabaseStorage implements IStorage {
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async createUser(data: InsertUser): Promise<User> {
+    const [inserted] = await db.insert(users).values(data).returning();
+    return inserted;
+  }
+
+  async updateUserOpenaiKey(id: number, openaiApiKey: string | null): Promise<User | null> {
+    const result = await db.update(users).set({ openaiApiKey }).where(eq(users.id, id)).returning();
+    return result.length > 0 ? result[0] : null;
+  }
+
   async getClients(): Promise<Client[]> {
     return await db.select().from(clients).orderBy(clients.name);
   }

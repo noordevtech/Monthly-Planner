@@ -3,12 +3,16 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Calendar, ListTodo, FileText, ArrowLeft, Users } from "lucide-react";
+import { Calendar, ListTodo, FileText, ArrowLeft, LogOut, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
+import AuthPage from "@/pages/AuthPage";
 import ClientsView from "@/pages/ClientsView";
 import CalendarView from "@/pages/CalendarView";
 import TasksView from "@/pages/TasksView";
 import MonthlyReportsView from "@/pages/MonthlyReportsView";
+import SettingsView from "@/pages/SettingsView";
+import { useAuth } from "@/hooks/use-auth";
 import { type Client } from "@shared/schema";
 
 function ClientNavBar({ clientId }: { clientId: number }) {
@@ -71,6 +75,44 @@ function ClientNavBar({ clientId }: { clientId: number }) {
   );
 }
 
+function TopBar() {
+  const { user, logout } = useAuth();
+  const [location] = useLocation();
+
+  return (
+    <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
+      <Link href="/" className="text-sm font-semibold text-foreground hover:text-primary transition-colors">
+        Work Calendar
+      </Link>
+      <div className="flex items-center gap-2">
+        <span data-testid="text-username" className="text-sm text-muted-foreground">
+          {user?.username}
+        </span>
+        <Link
+          href="/settings"
+          data-testid="link-settings"
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            location === "/settings" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Settings
+        </Link>
+        <Button
+          data-testid="button-logout"
+          size="sm"
+          variant="ghost"
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+        >
+          <LogOut className="w-4 h-4 mr-1" />
+          Sign Out
+        </Button>
+      </div>
+    </header>
+  );
+}
+
 function ClientCalendarPage() {
   const [, params] = useRoute("/clients/:id/calendar");
   const clientId = Number(params?.id);
@@ -107,16 +149,38 @@ function ClientReportsPage() {
   );
 }
 
-function Router() {
+function AuthenticatedApp() {
   return (
-    <Switch>
-      <Route path="/" component={ClientsView} />
-      <Route path="/clients/:id/calendar" component={ClientCalendarPage} />
-      <Route path="/clients/:id/tasks" component={ClientTasksPage} />
-      <Route path="/clients/:id/reports" component={ClientReportsPage} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <TopBar />
+      <Switch>
+        <Route path="/" component={ClientsView} />
+        <Route path="/settings" component={SettingsView} />
+        <Route path="/clients/:id/calendar" component={ClientCalendarPage} />
+        <Route path="/clients/:id/tasks" component={ClientTasksPage} />
+        <Route path="/clients/:id/reports" component={ClientReportsPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
+}
+
+function AppRouter() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  return <AuthenticatedApp />;
 }
 
 function App() {
@@ -125,7 +189,7 @@ function App() {
       <TooltipProvider>
         <div className="min-h-screen flex flex-col">
           <div className="flex-1 flex flex-col">
-            <Router />
+            <AppRouter />
           </div>
         </div>
         <Toaster />
