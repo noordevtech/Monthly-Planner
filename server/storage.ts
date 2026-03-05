@@ -1,38 +1,51 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import { workHours, type InsertWorkHours, type WorkHours } from "@shared/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getWorkHours(month?: string): Promise<WorkHours[]>;
+  upsertWorkHours(data: InsertWorkHours): Promise<WorkHours>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+export class DatabaseStorage implements IStorage {
+  async getWorkHours(month?: string): Promise<WorkHours[]> {
+    if (month) {
+      // Month format: YYYY-MM
+      const startDate = `${month}-01`;
+      // Create a date for the first of next month to get the end of current month
+      const [year, m] = month.split('-');
+      const nextMonth = parseInt(m) === 12 ? 1 : parseInt(m) + 1;
+      const nextYear = parseInt(m) === 12 ? parseInt(year) + 1 : parseInt(year);
+      const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
 
-  constructor() {
-    this.users = new Map();
+      return await db.select().from(workHours)
+        .where(
+          and(
+            gte(workHours.date, startDate),
+            // Less than the first of next month
+            lte(workHours.date, endDate) 
+          )
+        );
+    }
+    return await db.select().from(workHours);
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async upsertWorkHours(data: InsertWorkHours): Promise<WorkHours> {
+    const existing = await db.select().from(workHours).where(eq(workHours.date, data.date));
+    
+    if (existing.length > 0) {
+      const [updated] = await db.update(workHours)
+        .set({ hours: data.hours, notes: data.notes })
+        .where(eq(workHours.date, data.date))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(workHours)
+        .values(data)
+        .returning();
+      return inserted;
+    }
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
