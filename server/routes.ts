@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -9,107 +8,193 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Time slots routes
-  app.get(api.timeSlots.list.path, async (req, res) => {
-    try {
-      const input = api.timeSlots.list.input?.parse(req.query) || {};
-      const data = await storage.getTimeSlots(input.month);
-      res.json(data);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
-      }
-      throw err;
-    }
+  // Clients routes
+  app.get("/api/clients", async (_req, res) => {
+    const data = await storage.getClients();
+    res.json(data);
   });
 
-  app.post(api.timeSlots.create.path, async (req, res) => {
+  app.get("/api/clients/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const client = await storage.getClient(id);
+    if (!client) return res.status(404).json({ message: "Client not found" });
+    res.json(client);
+  });
+
+  app.post("/api/clients", async (req, res) => {
     try {
-      const input = api.timeSlots.create.input.parse(req.body);
-      const result = await storage.createTimeSlot(input);
+      const input = z.object({ name: z.string().min(1) }).parse(req.body);
+      const result = await storage.createClient(input);
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+        return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
     }
   });
 
-  app.delete(api.timeSlots.delete.path, async (req, res) => {
+  app.patch("/api/clients/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const input = z.object({ name: z.string().min(1) }).parse(req.body);
+      const result = await storage.updateClient(id, input);
+      if (!result) return res.status(404).json({ message: "Client not found" });
+      res.json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/clients/:id", async (req, res) => {
     const id = Number(req.params.id);
-    const deleted = await storage.deleteTimeSlot(id);
+    const deleted = await storage.deleteClient(id);
+    if (!deleted) return res.status(404).json({ message: "Client not found" });
+    res.json({ success: true });
+  });
+
+  // Time slots routes (scoped by client)
+  app.get("/api/clients/:clientId/time-slots", async (req, res) => {
+    try {
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
+      const input = z.object({
+        month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM").optional(),
+      }).parse(req.query);
+      const data = await storage.getTimeSlots(clientId, input.month);
+      res.json(data);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/clients/:clientId/time-slots", async (req, res) => {
+    try {
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
+      const input = z.object({
+        date: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+      }).parse(req.body);
+      const result = await storage.createTimeSlot({ clientId, ...input });
+      res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/clients/:clientId/time-slots/:id", async (req, res) => {
+    const clientId = Number(req.params.clientId);
+    const id = Number(req.params.id);
+    if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const deleted = await storage.deleteTimeSlot(clientId, id);
     if (!deleted) return res.status(404).json({ message: "Time slot not found" });
     res.json({ success: true });
   });
 
-  app.post(api.timeSlots.bulkSave.path, async (req, res) => {
+  app.post("/api/clients/:clientId/time-slots/bulk", async (req, res) => {
     try {
-      const input = api.timeSlots.bulkSave.input.parse(req.body);
-      const result = await storage.bulkSaveForDate(input.date, input.slots);
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
+      const input = z.object({
+        date: z.string(),
+        slots: z.array(z.object({
+          startTime: z.string(),
+          endTime: z.string(),
+        })),
+      }).parse(req.body);
+      const result = await storage.bulkSaveForDate(clientId, input.date, input.slots);
       res.json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+        return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
     }
   });
 
-  // Tasks routes
-  app.get(api.tasks.list.path, async (req, res) => {
+  // Tasks routes (scoped by client)
+  app.get("/api/clients/:clientId/tasks", async (req, res) => {
     try {
-      const input = api.tasks.list.input?.parse(req.query) || {};
-      const data = await storage.getTasks(input.date);
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
+      const input = z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").optional(),
+      }).parse(req.query);
+      const data = await storage.getTasks(clientId, input.date);
       res.json(data);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+        return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
     }
   });
 
-  app.post(api.tasks.create.path, async (req, res) => {
+  app.post("/api/clients/:clientId/tasks", async (req, res) => {
     try {
-      const input = api.tasks.create.input.parse(req.body);
-      const result = await storage.createTask(input);
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
+      const input = z.object({
+        date: z.string(),
+        title: z.string().min(1),
+      }).parse(req.body);
+      const result = await storage.createTask({ clientId, ...input });
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+        return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
     }
   });
 
-  app.patch(api.tasks.update.path, async (req, res) => {
+  app.patch("/api/clients/:clientId/tasks/:id", async (req, res) => {
     try {
+      const clientId = Number(req.params.clientId);
       const id = Number(req.params.id);
-      const input = api.tasks.update.input.parse(req.body);
-      const result = await storage.updateTask(id, input);
+      if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const input = z.object({
+        title: z.string().optional(),
+        completed: z.boolean().optional(),
+      }).parse(req.body);
+      const result = await storage.updateTask(clientId, id, input);
       if (!result) return res.status(404).json({ message: "Task not found" });
       res.json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+        return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
     }
   });
 
-  app.delete(api.tasks.delete.path, async (req, res) => {
+  app.delete("/api/clients/:clientId/tasks/:id", async (req, res) => {
+    const clientId = Number(req.params.clientId);
     const id = Number(req.params.id);
-    const deleted = await storage.deleteTask(id);
+    if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const deleted = await storage.deleteTask(clientId, id);
     if (!deleted) return res.status(404).json({ message: "Task not found" });
     res.json({ success: true });
   });
 
-  // AI report generation (generates and saves to DB)
-  app.post("/api/tasks/report", async (req, res) => {
+  // AI report generation (scoped by client)
+  app.post("/api/clients/:clientId/tasks/report", async (req, res) => {
     try {
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
       const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.body);
-      const tasks = await storage.getTasks(date);
+      const tasks = await storage.getTasks(clientId, date);
 
       if (tasks.length === 0) {
         return res.status(400).json({ message: "No tasks found for this date" });
@@ -138,7 +223,7 @@ export async function registerRoutes(
       });
 
       const reportContent = completion.choices[0]?.message?.content || "Unable to generate report.";
-      const saved = await storage.createReport({ date, content: reportContent });
+      const saved = await storage.createReport({ clientId, date, content: reportContent });
       res.json({ report: reportContent, saved });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -149,13 +234,15 @@ export async function registerRoutes(
     }
   });
 
-  // Reports routes
-  app.get("/api/reports", async (req, res) => {
+  // Reports routes (scoped by client)
+  app.get("/api/clients/:clientId/reports", async (req, res) => {
     try {
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
       const input = z.object({
         month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM").optional(),
       }).parse(req.query);
-      const data = await storage.getReports(input.month);
+      const data = await storage.getReports(clientId, input.month);
       res.json(data);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -165,45 +252,14 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/reports/:id", async (req, res) => {
+  app.delete("/api/clients/:clientId/reports/:id", async (req, res) => {
+    const clientId = Number(req.params.clientId);
     const id = Number(req.params.id);
-    const deleted = await storage.deleteReport(id);
+    if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const deleted = await storage.deleteReport(clientId, id);
     if (!deleted) return res.status(404).json({ message: "Report not found" });
     res.json({ success: true });
   });
-
-  // Seed time slots on first run
-  const existing = await storage.getTimeSlots();
-  if (existing.length === 0) {
-    await storage.bulkSaveForDate("2026-03-02", [
-      { startTime: "11h00", endTime: "16h30" },
-      { startTime: "11h00", endTime: "16h30" },
-    ]);
-    await storage.bulkSaveForDate("2026-03-03", [
-      { startTime: "11h00", endTime: "16h30" },
-      { startTime: "11h00", endTime: "16h30" },
-    ]);
-    await storage.bulkSaveForDate("2026-03-06", [
-      { startTime: "8h30", endTime: "12h" },
-      { startTime: "8h30", endTime: "12h" },
-    ]);
-    await storage.bulkSaveForDate("2026-03-09", [
-      { startTime: "11h00", endTime: "16h30" },
-      { startTime: "11h00", endTime: "16h30" },
-    ]);
-    await storage.bulkSaveForDate("2026-03-10", [
-      { startTime: "11h00", endTime: "16h30" },
-      { startTime: "11h00", endTime: "16h30" },
-    ]);
-    await storage.bulkSaveForDate("2026-03-11", [
-      { startTime: "11h00", endTime: "16h30" },
-      { startTime: "11h00", endTime: "16h30" },
-    ]);
-    await storage.bulkSaveForDate("2026-03-13", [
-      { startTime: "8h30", endTime: "12h" },
-      { startTime: "8h30", endTime: "12h" },
-    ]);
-  }
 
   return httpServer;
 }

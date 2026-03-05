@@ -6,19 +6,25 @@ import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/u
 import { useToast } from "@/hooks/use-toast";
 import { type Task } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { clientApiPaths } from "@shared/routes";
 
-export default function TasksView() {
+interface TasksViewProps {
+  clientId: number;
+}
+
+export default function TasksView({ clientId }: TasksViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [report, setReport] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const dateStr = format(currentDate, "yyyy-MM-dd");
-  const { data: tasks, isLoading } = useTasks(dateStr);
-  const createTask = useCreateTask();
-  const updateTask = useUpdateTask();
-  const deleteTask = useDeleteTask();
+  const { data: tasks, isLoading } = useTasks(clientId, dateStr);
+  const createTask = useCreateTask(clientId);
+  const updateTask = useUpdateTask(clientId);
+  const deleteTask = useDeleteTask(clientId);
   const { toast } = useToast();
+  const paths = clientApiPaths(clientId);
 
   const goToToday = () => { setCurrentDate(new Date()); setReport(null); };
   const prevDay = () => { setCurrentDate(subDays(currentDate, 1)); setReport(null); };
@@ -28,7 +34,7 @@ export default function TasksView() {
     setIsGenerating(true);
     setReport(null);
     try {
-      const res = await apiRequest("POST", "/api/tasks/report", { date: dateStr });
+      const res = await apiRequest("POST", paths.tasks.report, { date: dateStr });
       const data = await res.json();
       setReport(data.report);
     } catch (err: any) {
@@ -65,7 +71,7 @@ export default function TasksView() {
   };
 
   const isToday = format(new Date(), "yyyy-MM-dd") === dateStr;
-  const completedCount = tasks?.filter(t => t.completed).length || 0;
+  const completedCount = tasks?.filter((t: Task) => t.completed).length || 0;
   const totalCount = tasks?.length || 0;
 
   return (
@@ -122,7 +128,7 @@ export default function TasksView() {
           </div>
         ) : (
           <div className="space-y-2">
-            {tasks?.map((task) => (
+            {tasks?.map((task: Task) => (
               <div
                 key={task.id}
                 data-testid={`task-item-${task.id}`}

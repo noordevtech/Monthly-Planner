@@ -11,7 +11,6 @@ import {
   getMonth,
   getYear,
   isSameMonth,
-  getDaysInMonth,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Download, Clock } from "lucide-react";
 import { jsPDF } from "jspdf";
@@ -24,17 +23,21 @@ import { totalHoursFromSlots } from "@/lib/time-utils";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-export default function CalendarView() {
+interface CalendarViewProps {
+  clientId: number;
+}
+
+export default function CalendarView({ clientId }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const currentMonthStr = format(currentDate, "yyyy-MM");
-  const { data: slotsData, isLoading } = useTimeSlots(currentMonthStr);
+  const { data: slotsData, isLoading } = useTimeSlots(clientId, currentMonthStr);
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, TimeSlot[]>();
-    slotsData?.forEach((slot) => {
+    slotsData?.forEach((slot: TimeSlot) => {
       const key = slot.date;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(slot);
@@ -212,6 +215,7 @@ export default function CalendarView() {
         onOpenChange={setIsDialogOpen}
         date={selectedDate}
         existingSlots={getSelectedDaySlots()}
+        clientId={clientId}
       />
     </div>
   );

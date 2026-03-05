@@ -1,63 +1,65 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl } from "@shared/routes";
+import { clientApiPaths } from "@shared/routes";
 
-export function useTasks(date: string) {
+export function useTasks(clientId: number, date: string) {
+  const paths = clientApiPaths(clientId);
   return useQuery({
-    queryKey: [api.tasks.list.path, date],
+    queryKey: [paths.tasks.list, date],
     queryFn: async () => {
-      const url = `${api.tasks.list.path}?date=${encodeURIComponent(date)}`;
+      const url = `${paths.tasks.list}?date=${encodeURIComponent(date)}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tasks");
-      return api.tasks.list.responses[200].parse(await res.json());
+      return res.json();
     },
   });
 }
 
-export function useCreateTask() {
+export function useCreateTask(clientId: number) {
   const queryClient = useQueryClient();
+  const paths = clientApiPaths(clientId);
   return useMutation({
     mutationFn: async (data: { date: string; title: string }) => {
-      const res = await fetch(api.tasks.create.path, {
+      const res = await fetch(paths.tasks.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to create task");
-      return api.tasks.create.responses[201].parse(await res.json());
+      return res.json();
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [api.tasks.list.path, variables.date] });
+      queryClient.invalidateQueries({ queryKey: [paths.tasks.list, variables.date] });
     },
   });
 }
 
-export function useUpdateTask() {
+export function useUpdateTask(clientId: number) {
   const queryClient = useQueryClient();
+  const paths = clientApiPaths(clientId);
   return useMutation({
     mutationFn: async ({ id, date, ...updates }: { id: number; date: string; title?: string; completed?: boolean }) => {
-      const url = buildUrl(api.tasks.update.path, { id });
-      const res = await fetch(url, {
+      const res = await fetch(paths.tasks.update(id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to update task");
-      return api.tasks.update.responses[200].parse(await res.json());
+      return res.json();
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: [api.tasks.list.path, result.date] });
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: [paths.tasks.list, result.date] });
     },
   });
 }
 
-export function useDeleteTask() {
+export function useDeleteTask(clientId: number) {
   const queryClient = useQueryClient();
+  const paths = clientApiPaths(clientId);
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
-      const url = buildUrl(api.tasks.delete.path, { id });
-      const res = await fetch(url, {
+      const res = await fetch(paths.tasks.delete(id), {
         method: "DELETE",
         credentials: "include",
       });
@@ -65,7 +67,7 @@ export function useDeleteTask() {
       return { date };
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: [api.tasks.list.path, result.date] });
+      queryClient.invalidateQueries({ queryKey: [paths.tasks.list, result.date] });
     },
   });
 }

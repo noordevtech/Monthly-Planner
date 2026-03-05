@@ -12,7 +12,7 @@ import {
   getYear,
   isSameMonth,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, Download, FileText, Loader2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileText, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -20,23 +20,28 @@ import { useTimeSlots } from "@/hooks/use-work-hours";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { totalHoursFromSlots } from "@/lib/time-utils";
+import { clientApiPaths } from "@shared/routes";
 import { type Report, type TimeSlot } from "@shared/schema";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-export default function MonthlyReportsView() {
+interface MonthlyReportsViewProps {
+  clientId: number;
+}
+
+export default function MonthlyReportsView({ clientId }: MonthlyReportsViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const paths = clientApiPaths(clientId);
 
   const currentMonthStr = format(currentDate, "yyyy-MM");
-  const { data: slotsData } = useTimeSlots(currentMonthStr);
+  const { data: slotsData } = useTimeSlots(clientId, currentMonthStr);
 
   const { data: reports, isLoading: reportsLoading } = useQuery<Report[]>({
-    queryKey: ["/api/reports", currentMonthStr],
+    queryKey: [paths.reports.list, currentMonthStr],
     queryFn: async () => {
-      const res = await fetch(`/api/reports?month=${encodeURIComponent(currentMonthStr)}`, { credentials: "include" });
+      const res = await fetch(`${paths.reports.list}?month=${encodeURIComponent(currentMonthStr)}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch reports");
       return res.json();
     },
@@ -44,7 +49,7 @@ export default function MonthlyReportsView() {
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, TimeSlot[]>();
-    slotsData?.forEach((slot) => {
+    slotsData?.forEach((slot: TimeSlot) => {
       const key = slot.date;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(slot);
@@ -72,8 +77,8 @@ export default function MonthlyReportsView() {
 
   const handleDeleteReport = async (id: number) => {
     try {
-      await apiRequest("DELETE", `/api/reports/${id}`);
-      queryClient.invalidateQueries({ queryKey: ["/api/reports", currentMonthStr] });
+      await apiRequest("DELETE", paths.reports.delete(id));
+      queryClient.invalidateQueries({ queryKey: [paths.reports.list, currentMonthStr] });
     } catch {
       toast({ title: "Error", description: "Failed to delete report", variant: "destructive" });
     }

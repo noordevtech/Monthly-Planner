@@ -23,11 +23,12 @@ interface WorkHourDialogProps {
   onOpenChange: (open: boolean) => void;
   date: Date | null;
   existingSlots: TimeSlot[];
+  clientId: number;
 }
 
-export function WorkHourDialog({ isOpen, onOpenChange, date, existingSlots }: WorkHourDialogProps) {
+export function WorkHourDialog({ isOpen, onOpenChange, date, existingSlots, clientId }: WorkHourDialogProps) {
   const { toast } = useToast();
-  const bulkSave = useBulkSaveSlots();
+  const bulkSave = useBulkSaveSlots(clientId);
   const [rows, setRows] = useState<SlotRow[]>([]);
 
   useEffect(() => {
