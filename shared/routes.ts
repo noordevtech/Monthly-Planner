@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertTimeSlotSchema, timeSlots } from './schema';
+import { insertTimeSlotSchema, insertTaskSchema, timeSlots, tasks } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -53,6 +53,47 @@ export const api = {
       responses: {
         200: z.array(z.custom<typeof timeSlots.$inferSelect>()),
         400: errorSchemas.validation,
+      },
+    },
+  },
+  tasks: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/tasks' as const,
+      input: z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD").optional(),
+      }).optional(),
+      responses: {
+        200: z.array(z.custom<typeof tasks.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/tasks' as const,
+      input: insertTaskSchema,
+      responses: {
+        201: z.custom<typeof tasks.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/tasks/:id' as const,
+      input: z.object({
+        title: z.string().optional(),
+        completed: z.boolean().optional(),
+      }),
+      responses: {
+        200: z.custom<typeof tasks.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/tasks/:id' as const,
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
       },
     },
   },

@@ -143,7 +143,7 @@ export default function CalendarView() {
   }, [calendarDays, slotsByDate, currentDate, monthNumber, monthName, year, totalMonthHours]);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex-1 flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-border bg-card">
         <div className="flex items-center gap-3">
           <Button data-testid="button-prev-month" size="icon" variant="ghost" onClick={prevMonth}>
