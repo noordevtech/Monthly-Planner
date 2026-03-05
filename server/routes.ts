@@ -3,6 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import OpenAI from "openai";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -102,6 +103,49 @@ export async function registerRoutes(
     const deleted = await storage.deleteTask(id);
     if (!deleted) return res.status(404).json({ message: "Task not found" });
     res.json({ success: true });
+  });
+
+  // AI report generation
+  app.post("/api/tasks/report", async (req, res) => {
+    try {
+      const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.body);
+      const tasks = await storage.getTasks(date);
+
+      if (tasks.length === 0) {
+        return res.status(400).json({ message: "No tasks found for this date" });
+      }
+
+      const taskList = tasks.map(t => `- [${t.completed ? "DONE" : "PENDING"}] ${t.title}`).join("\n");
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are a professional work report writer. Given a list of tasks for a workday, write a concise daily work report summarizing what was accomplished and what remains. Keep it brief and professional, using 3-5 sentences.",
+          },
+          {
+            role: "user",
+            content: `Write a daily work report for ${date}.\n\nTasks:\n${taskList}`,
+          },
+        ],
+        max_tokens: 500,
+      });
+
+      const report = completion.choices[0]?.message?.content || "Unable to generate report.";
+      res.json({ report });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Error generating report:", err);
+      res.status(500).json({ message: "Failed to generate report" });
+    }
   });
 
   // Seed time slots on first run

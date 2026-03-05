@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Circle, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
 import { useToast } from "@/hooks/use-toast";
 import { type Task } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function TasksView() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [report, setReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const dateStr = format(currentDate, "yyyy-MM-dd");
   const { data: tasks, isLoading } = useTasks(dateStr);
@@ -17,9 +20,23 @@ export default function TasksView() {
   const deleteTask = useDeleteTask();
   const { toast } = useToast();
 
-  const goToToday = () => setCurrentDate(new Date());
-  const prevDay = () => setCurrentDate(subDays(currentDate, 1));
-  const nextDay = () => setCurrentDate(addDays(currentDate, 1));
+  const goToToday = () => { setCurrentDate(new Date()); setReport(null); };
+  const prevDay = () => { setCurrentDate(subDays(currentDate, 1)); setReport(null); };
+  const nextDay = () => { setCurrentDate(addDays(currentDate, 1)); setReport(null); };
+
+  const handleGenerateReport = async () => {
+    setIsGenerating(true);
+    setReport(null);
+    try {
+      const res = await apiRequest("POST", "/api/tasks/report", { date: dateStr });
+      const data = await res.json();
+      setReport(data.report);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to generate report", variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,6 +162,36 @@ export default function TasksView() {
                 </Button>
               </div>
             ))}
+          </div>
+        )}
+
+        {tasks && tasks.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-border">
+            <Button
+              data-testid="button-generate-report"
+              onClick={handleGenerateReport}
+              disabled={isGenerating}
+              variant="outline"
+              className="w-full"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating Report...
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Generate AI Report
+                </>
+              )}
+            </Button>
+
+            {report && (
+              <div data-testid="text-ai-report" className="mt-4 p-4 rounded-md bg-muted text-sm leading-relaxed whitespace-pre-wrap">
+                {report}
+              </div>
+            )}
           </div>
         )}
       </div>

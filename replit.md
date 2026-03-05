@@ -60,6 +60,11 @@ Routes are defined in `shared/routes.ts` as a typed `api` object (method, path, 
 | POST | `/api/time-slots` | Create a single slot |
 | DELETE | `/api/time-slots/:id` | Delete a slot by ID |
 | POST | `/api/time-slots/bulk` | Bulk replace all slots for a date |
+| GET | `/api/tasks?date=YYYY-MM-DD` | List tasks for a date |
+| POST | `/api/tasks` | Create a task |
+| PATCH | `/api/tasks/:id` | Update a task (title, completed) |
+| DELETE | `/api/tasks/:id` | Delete a task |
+| POST | `/api/tasks/report` | Generate AI report from day's tasks |
 
 The bulk-save endpoint (`bulkSave`) deletes all existing slots for a date then inserts the new set — this is the primary save path used by `WorkHourDialog`.
 
@@ -102,5 +107,12 @@ This avoids duplicating type definitions and keeps client/server in sync.
 - **@replit/vite-plugin-runtime-error-modal** — dev error overlay
 - **@replit/vite-plugin-cartographer** + **@replit/vite-plugin-dev-banner** — Replit-specific dev tools (only active in Replit environment)
 
+### AI Integration
+- **OpenAI** via Replit AI Integrations — used for generating daily work reports from tasks
+- Environment variables: `AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL` (auto-configured)
+- Integration files in `server/replit_integrations/` and `client/replit_integrations/` (audio, chat, image, batch utilities)
+
 ### Environment Variables Required
 - `DATABASE_URL` — PostgreSQL connection string (mandatory; app throws on startup without it)
+- `AI_INTEGRATIONS_OPENAI_API_KEY` — OpenAI API key (auto-configured by Replit AI Integrations)
+- `AI_INTEGRATIONS_OPENAI_BASE_URL` — OpenAI base URL (auto-configured by Replit AI Integrations)
