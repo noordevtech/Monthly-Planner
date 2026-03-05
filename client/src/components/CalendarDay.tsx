@@ -1,66 +1,53 @@
-import { format, isSameMonth, isToday } from "date-fns";
-import { FileText } from "lucide-react";
-import { type WorkHours } from "@shared/schema";
-import { motion } from "framer-motion";
+import { format, isSameMonth, isToday, isSunday, isSaturday } from "date-fns";
+import { type TimeSlot } from "@shared/schema";
 
 interface CalendarDayProps {
   day: Date;
   currentMonth: Date;
-  data?: WorkHours;
+  slots: TimeSlot[];
   onClick: (day: Date) => void;
 }
 
-export function CalendarDay({ day, currentMonth, data, onClick }: CalendarDayProps) {
+export function CalendarDay({ day, currentMonth, slots, onClick }: CalendarDayProps) {
   const isCurrentMonth = isSameMonth(day, currentMonth);
   const isCurrentDay = isToday(day);
-  const hasHours = data && data.hours > 0;
-  const hasNotes = data && data.notes && data.notes.trim().length > 0;
+  const isWeekend = isSunday(day) || isSaturday(day);
 
   return (
-    <motion.button
-      whileHover={{ y: -2, scale: 1.01 }}
-      whileTap={{ scale: 0.98 }}
+    <button
+      data-testid={`calendar-day-${format(day, "yyyy-MM-dd")}`}
       onClick={() => onClick(day)}
       className={`
-        relative h-32 w-full p-3 rounded-2xl flex flex-col items-start justify-between
-        transition-all duration-300 border border-transparent
-        focus:outline-none focus:ring-4 focus:ring-primary/20
-        ${!isCurrentMonth ? "opacity-40 bg-muted/20 hover:bg-muted/40" : "bg-card hover:shadow-lg hover:shadow-black/5 hover:border-border/80"}
-        ${isCurrentDay ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
+        relative min-h-[100px] w-full p-2 flex flex-col items-start text-left
+        border-b border-r border-border/60
+        transition-colors duration-150
+        focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-inset
+        ${!isCurrentMonth ? "opacity-30 bg-muted/30" : isWeekend ? "bg-muted/20" : "bg-card"}
+        ${isCurrentMonth ? "cursor-pointer hover:bg-primary/5" : "cursor-default pointer-events-none"}
       `}
     >
-      <div className="w-full flex justify-between items-start">
-        <span
-          className={`
-            text-sm font-semibold flex items-center justify-center w-8 h-8 rounded-full
-            ${isCurrentDay ? "bg-primary text-primary-foreground" : "text-muted-foreground"}
-          `}
-        >
-          {format(day, "d")}
-        </span>
-        
-        {hasNotes && (
-          <div 
-            className="text-primary/60 bg-primary/10 p-1.5 rounded-full"
-            title="Has notes"
-          >
-            <FileText className="w-3.5 h-3.5" />
-          </div>
-        )}
-      </div>
+      <span
+        className={`
+          text-sm font-bold mb-1
+          ${isCurrentDay ? "bg-primary text-primary-foreground w-7 h-7 rounded-full flex items-center justify-center" : ""}
+          ${!isCurrentDay && isCurrentMonth ? "text-foreground" : ""}
+          ${!isCurrentMonth ? "text-muted-foreground" : ""}
+        `}
+      >
+        {format(day, "d")}
+      </span>
 
-      <div className="w-full flex flex-col items-start gap-1 mt-auto">
-        {hasHours ? (
-          <div className="w-full bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg flex items-baseline justify-between font-semibold border border-primary/20">
-            <span className="text-lg leading-none">{data.hours}</span>
-            <span className="text-xs font-medium uppercase tracking-wider opacity-70">hrs</span>
+      <div className="flex flex-col gap-0.5 w-full mt-auto">
+        {slots.map((slot) => (
+          <div
+            key={slot.id}
+            data-testid={`slot-${slot.id}`}
+            className="text-xs font-medium text-primary truncate"
+          >
+            {slot.startTime}-{slot.endTime}
           </div>
-        ) : (
-          <div className="w-full bg-transparent px-2.5 py-1.5 rounded-lg flex items-center text-transparent group-hover:text-muted-foreground/40 transition-colors border border-transparent border-dashed group-hover:border-border">
-            <span className="text-xs font-medium">+ Add</span>
-          </div>
-        )}
+        ))}
       </div>
-    </motion.button>
+    </button>
   );
 }

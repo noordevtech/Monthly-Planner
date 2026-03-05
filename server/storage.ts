@@ -1,50 +1,46 @@
 import { db } from "./db";
-import { workHours, type InsertWorkHours, type WorkHours } from "@shared/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { timeSlots, type InsertTimeSlot, type TimeSlot } from "@shared/schema";
+import { eq, and, gte, lt } from "drizzle-orm";
 
 export interface IStorage {
-  getWorkHours(month?: string): Promise<WorkHours[]>;
-  upsertWorkHours(data: InsertWorkHours): Promise<WorkHours>;
+  getTimeSlots(month?: string): Promise<TimeSlot[]>;
+  createTimeSlot(data: InsertTimeSlot): Promise<TimeSlot>;
+  deleteTimeSlot(id: number): Promise<boolean>;
+  bulkSaveForDate(date: string, slots: { startTime: string; endTime: string }[]): Promise<TimeSlot[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getWorkHours(month?: string): Promise<WorkHours[]> {
+  async getTimeSlots(month?: string): Promise<TimeSlot[]> {
     if (month) {
-      // Month format: YYYY-MM
       const startDate = `${month}-01`;
-      // Create a date for the first of next month to get the end of current month
       const [year, m] = month.split('-');
       const nextMonth = parseInt(m) === 12 ? 1 : parseInt(m) + 1;
       const nextYear = parseInt(m) === 12 ? parseInt(year) + 1 : parseInt(year);
       const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01`;
 
-      return await db.select().from(workHours)
-        .where(
-          and(
-            gte(workHours.date, startDate),
-            // Less than the first of next month
-            lte(workHours.date, endDate) 
-          )
-        );
+      return await db.select().from(timeSlots)
+        .where(and(gte(timeSlots.date, startDate), lt(timeSlots.date, endDate)));
     }
-    return await db.select().from(workHours);
+    return await db.select().from(timeSlots);
   }
 
-  async upsertWorkHours(data: InsertWorkHours): Promise<WorkHours> {
-    const existing = await db.select().from(workHours).where(eq(workHours.date, data.date));
-    
-    if (existing.length > 0) {
-      const [updated] = await db.update(workHours)
-        .set({ hours: data.hours, notes: data.notes })
-        .where(eq(workHours.date, data.date))
-        .returning();
-      return updated;
-    } else {
-      const [inserted] = await db.insert(workHours)
-        .values(data)
-        .returning();
-      return inserted;
-    }
+  async createTimeSlot(data: InsertTimeSlot): Promise<TimeSlot> {
+    const [inserted] = await db.insert(timeSlots).values(data).returning();
+    return inserted;
+  }
+
+  async deleteTimeSlot(id: number): Promise<boolean> {
+    const result = await db.delete(timeSlots).where(eq(timeSlots.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async bulkSaveForDate(date: string, slots: { startTime: string; endTime: string }[]): Promise<TimeSlot[]> {
+    await db.delete(timeSlots).where(eq(timeSlots.date, date));
+
+    if (slots.length === 0) return [];
+
+    const values = slots.map(s => ({ date, startTime: s.startTime, endTime: s.endTime }));
+    return await db.insert(timeSlots).values(values).returning();
   }
 }
 

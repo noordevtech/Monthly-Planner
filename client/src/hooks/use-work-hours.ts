@@ -1,55 +1,39 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
-import { z } from "zod";
 
-// Fetch work hours for a specific month
-export function useWorkHours(month: string) {
+export function useTimeSlots(month: string) {
   return useQuery({
-    queryKey: [api.workHours.list.path, month],
+    queryKey: [api.timeSlots.list.path, month],
     queryFn: async () => {
-      const url = `${api.workHours.list.path}?month=${encodeURIComponent(month)}`;
+      const url = `${api.timeSlots.list.path}?month=${encodeURIComponent(month)}`;
       const res = await fetch(url, { credentials: "include" });
-      
-      if (!res.ok) {
-        throw new Error("Failed to fetch work hours");
-      }
-      
-      const data = await res.json();
-      return api.workHours.list.responses[200].parse(data);
+      if (!res.ok) throw new Error("Failed to fetch time slots");
+      return api.timeSlots.list.responses[200].parse(await res.json());
     },
   });
 }
 
-// Upsert work hours for a specific day
-export function useUpsertWorkHours() {
+export function useBulkSaveSlots() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: async (data: z.infer<typeof api.workHours.upsert.input>) => {
-      const validated = api.workHours.upsert.input.parse(data);
-      
-      const res = await fetch(api.workHours.upsert.path, {
-        method: api.workHours.upsert.method,
+    mutationFn: async (data: { date: string; slots: { startTime: string; endTime: string }[] }) => {
+      const validated = api.timeSlots.bulkSave.input.parse(data);
+      const res = await fetch(api.timeSlots.bulkSave.path, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(validated),
         credentials: "include",
       });
-      
       if (!res.ok) {
-        if (res.status === 400) {
-          const error = api.workHours.upsert.responses[400].parse(await res.json());
-          throw new Error(error.message);
-        }
-        throw new Error("Failed to save work hours");
+        const error = await res.json();
+        throw new Error(error.message || "Failed to save");
       }
-      
-      return api.workHours.upsert.responses[200].parse(await res.json());
+      return api.timeSlots.bulkSave.responses[200].parse(await res.json());
     },
-    onSuccess: (data) => {
-      // Invalidate the query for the month that contains this date
-      const month = data.date.substring(0, 7); // Extract YYYY-MM from YYYY-MM-DD
-      queryClient.invalidateQueries({ queryKey: [api.workHours.list.path, month] });
-      queryClient.invalidateQueries({ queryKey: [api.workHours.list.path] });
+    onSuccess: (_, variables) => {
+      const month = variables.date.substring(0, 7);
+      queryClient.invalidateQueries({ queryKey: [api.timeSlots.list.path, month] });
     },
   });
 }

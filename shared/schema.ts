@@ -1,15 +1,15 @@
-import { pgTable, serial, integer, text, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const workHours = pgTable("work_hours", {
+export const timeSlots = pgTable("time_slots", {
   id: serial("id").primaryKey(),
-  date: date("date").notNull().unique(), // Format: YYYY-MM-DD
-  hours: integer("hours").notNull().default(0),
-  notes: text("notes"),
+  date: date("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
 });
 
-export const insertWorkHoursSchema = createInsertSchema(workHours).omit({ id: true });
+export const insertTimeSlotSchema = createInsertSchema(timeSlots).omit({ id: true });
 
-export type InsertWorkHours = z.infer<typeof insertWorkHoursSchema>;
-export type WorkHours = typeof workHours.$inferSelect;
+export type InsertTimeSlot = z.infer<typeof insertTimeSlotSchema>;
+export type TimeSlot = typeof timeSlots.$inferSelect;

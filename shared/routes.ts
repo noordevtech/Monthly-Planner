@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertWorkHoursSchema, workHours } from './schema';
+import { insertTimeSlotSchema, timeSlots } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -9,29 +9,49 @@ export const errorSchemas = {
   notFound: z.object({
     message: z.string(),
   }),
-  internal: z.object({
-    message: z.string(),
-  }),
 };
 
 export const api = {
-  workHours: {
+  timeSlots: {
     list: {
       method: 'GET' as const,
-      path: '/api/work-hours' as const,
+      path: '/api/time-slots' as const,
       input: z.object({
         month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM").optional(),
       }).optional(),
       responses: {
-        200: z.array(z.custom<typeof workHours.$inferSelect>()),
+        200: z.array(z.custom<typeof timeSlots.$inferSelect>()),
       },
     },
-    upsert: {
+    create: {
       method: 'POST' as const,
-      path: '/api/work-hours' as const,
-      input: insertWorkHoursSchema,
+      path: '/api/time-slots' as const,
+      input: insertTimeSlotSchema,
       responses: {
-        200: z.custom<typeof workHours.$inferSelect>(),
+        201: z.custom<typeof timeSlots.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/time-slots/:id' as const,
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
+    bulkSave: {
+      method: 'POST' as const,
+      path: '/api/time-slots/bulk' as const,
+      input: z.object({
+        date: z.string(),
+        slots: z.array(z.object({
+          startTime: z.string(),
+          endTime: z.string(),
+        })),
+      }),
+      responses: {
+        200: z.array(z.custom<typeof timeSlots.$inferSelect>()),
         400: errorSchemas.validation,
       },
     },

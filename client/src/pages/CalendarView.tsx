@@ -1,182 +1,124 @@
 import { useState, useMemo } from "react";
-import { 
-  addMonths, 
-  subMonths, 
-  startOfMonth, 
-  endOfMonth, 
-  startOfWeek, 
-  endOfWeek, 
-  eachDayOfInterval, 
-  format 
+import {
+  addMonths,
+  subMonths,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  format,
+  getMonth,
+  getYear,
 } from "date-fns";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Briefcase } from "lucide-react";
-import { useWorkHours } from "@/hooks/use-work-hours";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTimeSlots } from "@/hooks/use-work-hours";
 import { CalendarDay } from "@/components/CalendarDay";
 import { WorkHourDialog } from "@/components/WorkHourDialog";
+import { Button } from "@/components/ui/button";
+import { type TimeSlot } from "@shared/schema";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 export default function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  // Format for API querying
+
   const currentMonthStr = format(currentDate, "yyyy-MM");
-  
-  // Fetch data
-  const { data: workHoursData, isLoading } = useWorkHours(currentMonthStr);
-  
-  // Create a map for O(1) lookups
-  const workHoursMap = useMemo(() => {
-    const map = new Map();
-    workHoursData?.forEach((entry) => {
-      map.set(entry.date, entry);
+  const { data: slotsData, isLoading } = useTimeSlots(currentMonthStr);
+
+  const slotsByDate = useMemo(() => {
+    const map = new Map<string, TimeSlot[]>();
+    slotsData?.forEach((slot) => {
+      const key = slot.date;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(slot);
     });
     return map;
-  }, [workHoursData]);
+  }, [slotsData]);
 
-  // Calculate total hours for the month
-  const totalMonthHours = useMemo(() => {
-    return workHoursData?.reduce((total, entry) => total + entry.hours, 0) || 0;
-  }, [workHoursData]);
-
-  // Calendar grid logic
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
-  const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+  const startDate = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 });
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+
+  const monthNumber = (getMonth(currentDate) + 1).toString().padStart(2, "0");
+  const monthName = format(currentDate, "MMMM").toUpperCase();
+  const year = getYear(currentDate);
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
-  const goToToday = () => setCurrentDate(new Date());
 
   const handleDayClick = (day: Date) => {
     setSelectedDate(day);
     setIsDialogOpen(true);
   };
 
-  const getSelectedDayData = () => {
-    if (!selectedDate) return undefined;
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-    return workHoursMap.get(dateStr);
+  const getSelectedDaySlots = (): TimeSlot[] => {
+    if (!selectedDate) return [];
+    return slotsByDate.get(format(selectedDate, "yyyy-MM-dd")) || [];
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8 lg:p-12 pb-24 max-w-[1400px] mx-auto">
-      <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold tracking-wide mb-3">
-            <Briefcase className="w-4 h-4" />
-            Workspace
-          </div>
-          <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground tracking-tight">
-            Schedule
+    <div className="min-h-screen flex flex-col">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
+        <div className="flex items-center gap-3">
+          <Button data-testid="button-prev-month" size="icon" variant="ghost" onClick={prevMonth}>
+            <ChevronLeft className="w-5 h-5" />
+          </Button>
+          <h1 data-testid="text-month-header" className="text-xl md:text-2xl font-bold tracking-wide text-foreground select-none min-w-[280px] text-center">
+            {monthNumber}
+            <span className="mx-6">{monthName}</span>
+            {year}
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Manage and track your monthly working hours.
-          </p>
-        </div>
-
-        <div className="glass-card px-6 py-4 rounded-2xl flex items-center gap-6">
-          <div>
-            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Total Hours
-            </p>
-            <div className="flex items-baseline gap-1 mt-1">
-              {isLoading ? (
-                <div className="h-8 w-16 bg-muted animate-pulse rounded" />
-              ) : (
-                <>
-                  <span className="text-3xl font-display font-bold text-foreground">
-                    {totalMonthHours}
-                  </span>
-                  <span className="text-muted-foreground font-medium">hrs</span>
-                </>
-              )}
-            </div>
-          </div>
+          <Button data-testid="button-next-month" size="icon" variant="ghost" onClick={nextMonth}>
+            <ChevronRight className="w-5 h-5" />
+          </Button>
         </div>
       </div>
 
-      <div className="glass-card rounded-[2rem] overflow-hidden shadow-xl shadow-primary/5">
-        {/* Calendar Header */}
-        <div className="p-6 md:px-8 border-b border-border/50 flex items-center justify-between bg-white/50">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-display font-bold min-w-[180px]">
-              {format(currentDate, "MMMM yyyy")}
-            </h2>
-            <button
-              onClick={goToToday}
-              className="hidden sm:block px-4 py-1.5 rounded-full bg-muted/50 hover:bg-muted text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+      <div className="flex-1 flex flex-col">
+        <div className="grid grid-cols-7 border-b border-border bg-muted/40">
+          {WEEKDAYS.map((day) => (
+            <div
+              key={day}
+              className="py-2 text-center text-xs font-bold tracking-widest text-muted-foreground border-r border-border/60 last:border-r-0"
             >
-              Today
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={prevMonth}
-              className="p-2.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-all hover:scale-105 active:scale-95"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
-            <button
-              onClick={nextMonth}
-              className="p-2.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-all hover:scale-105 active:scale-95"
-            >
-              <ChevronRight className="w-6 h-6" />
-            </button>
-          </div>
+              {day}
+            </div>
+          ))}
         </div>
 
-        {/* Calendar Body */}
-        <div className="p-6 md:p-8 bg-white/30">
-          <div className="grid grid-cols-7 gap-4 mb-4">
-            {WEEKDAYS.map((day) => (
-              <div
-                key={day}
-                className="text-center text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
-              >
-                {day}
-              </div>
-            ))}
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-muted-foreground">Loading...</div>
           </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentMonthStr}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="grid grid-cols-7 gap-2 md:gap-4 group"
-            >
-              {calendarDays.map((day) => {
-                const dateStr = format(day, "yyyy-MM-dd");
-                const data = workHoursMap.get(dateStr);
-                return (
-                  <CalendarDay
-                    key={day.toISOString()}
-                    day={day}
-                    currentMonth={currentDate}
-                    data={data}
-                    onClick={handleDayClick}
-                  />
-                );
-              })}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+        ) : (
+          <div className="grid grid-cols-7 flex-1">
+            {calendarDays.map((day) => {
+              const dateStr = format(day, "yyyy-MM-dd");
+              const slots = slotsByDate.get(dateStr) || [];
+              return (
+                <CalendarDay
+                  key={day.toISOString()}
+                  day={day}
+                  currentMonth={currentDate}
+                  slots={slots}
+                  onClick={handleDayClick}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <WorkHourDialog
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         date={selectedDate}
-        initialData={getSelectedDayData()}
+        existingSlots={getSelectedDaySlots()}
       />
     </div>
   );
