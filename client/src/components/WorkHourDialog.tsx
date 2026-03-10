@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, Copy } from "lucide-react";
 import { useBulkSaveSlots } from "@/hooks/use-work-hours";
 import { useToast } from "@/hooks/use-toast";
 import { type TimeSlot } from "@shared/schema";
@@ -24,9 +24,10 @@ interface WorkHourDialogProps {
   date: Date | null;
   existingSlots: TimeSlot[];
   clientId: number;
+  onStartCopy?: (sourceDate: string, slots: SlotRow[]) => void;
 }
 
-export function WorkHourDialog({ isOpen, onOpenChange, date, existingSlots, clientId }: WorkHourDialogProps) {
+export function WorkHourDialog({ isOpen, onOpenChange, date, existingSlots, clientId, onStartCopy }: WorkHourDialogProps) {
   const { toast } = useToast();
   const bulkSave = useBulkSaveSlots(clientId);
   const [rows, setRows] = useState<SlotRow[]>([]);
@@ -129,22 +130,41 @@ export function WorkHourDialog({ isOpen, onOpenChange, date, existingSlots, clie
           <Plus className="w-4 h-4 mr-1" /> Add Slot
         </Button>
 
-        <div className="flex justify-end gap-2 mt-4">
-          <Button
-            data-testid="button-cancel"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            data-testid="button-save"
-            onClick={handleSave}
-            disabled={bulkSave.isPending}
-          >
-            {bulkSave.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-            Save
-          </Button>
+        <div className="flex justify-between gap-2 mt-4">
+          <div>
+            {onStartCopy && existingSlots.length > 0 && (
+              <Button
+                data-testid="button-copy-slots"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!date) return;
+                  const slotsToUse = existingSlots.map(s => ({ startTime: s.startTime, endTime: s.endTime }));
+                  onStartCopy(format(date, "yyyy-MM-dd"), slotsToUse);
+                }}
+              >
+                <Copy className="w-4 h-4 mr-1" />
+                Copy to other days
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              data-testid="button-cancel"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-testid="button-save"
+              onClick={handleSave}
+              disabled={bulkSave.isPending}
+            >
+              {bulkSave.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Save
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

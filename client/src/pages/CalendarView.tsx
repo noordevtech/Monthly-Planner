@@ -14,9 +14,10 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Download, Clock } from "lucide-react";
 import { jsPDF } from "jspdf";
-import { useTimeSlots } from "@/hooks/use-work-hours";
+import { useTimeSlots, useBulkSaveSlots } from "@/hooks/use-work-hours";
 import { CalendarDay } from "@/components/CalendarDay";
 import { WorkHourDialog } from "@/components/WorkHourDialog";
+import { CopySlotsPicker } from "@/components/CopySlotsPicker";
 import { Button } from "@/components/ui/button";
 import { type TimeSlot } from "@shared/schema";
 import { totalHoursFromSlots } from "@/lib/time-utils";
@@ -31,9 +32,11 @@ export default function CalendarView({ clientId }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [copyMode, setCopyMode] = useState<{ sourceDate: string; slots: { startTime: string; endTime: string }[] } | null>(null);
 
   const currentMonthStr = format(currentDate, "yyyy-MM");
   const { data: slotsData, isLoading } = useTimeSlots(clientId, currentMonthStr);
+  const bulkSave = useBulkSaveSlots(clientId);
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, TimeSlot[]>();
@@ -64,8 +67,14 @@ export default function CalendarView({ clientId }: CalendarViewProps) {
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
 
   const handleDayClick = (day: Date) => {
+    if (copyMode) return;
     setSelectedDate(day);
     setIsDialogOpen(true);
+  };
+
+  const handleStartCopy = (sourceDate: string, slots: { startTime: string; endTime: string }[]) => {
+    setIsDialogOpen(false);
+    setCopyMode({ sourceDate, slots });
   };
 
   const getSelectedDaySlots = (): TimeSlot[] => {
@@ -216,7 +225,19 @@ export default function CalendarView({ clientId }: CalendarViewProps) {
         date={selectedDate}
         existingSlots={getSelectedDaySlots()}
         clientId={clientId}
+        onStartCopy={handleStartCopy}
       />
+
+      {copyMode && (
+        <CopySlotsPicker
+          sourceDate={copyMode.sourceDate}
+          slots={copyMode.slots}
+          calendarDays={calendarDays.filter(d => isSameMonth(d, currentDate))}
+          slotsByDate={slotsByDate}
+          bulkSave={bulkSave}
+          onClose={() => setCopyMode(null)}
+        />
+      )}
     </div>
   );
 }
