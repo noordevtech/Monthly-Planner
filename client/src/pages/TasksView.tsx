@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Circle, FileText, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Circle, FileText, Loader2, Pencil, X, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { type Task } from "@shared/schema";
+import { type Task, type Report } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { clientApiPaths } from "@shared/routes";
 
@@ -15,8 +16,9 @@ interface TasksViewProps {
 export default function TasksView({ clientId }: TasksViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [report, setReport] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
 
   const dateStr = format(currentDate, "yyyy-MM-dd");
   const { data: tasks, isLoading } = useTasks(clientId, dateStr);
@@ -25,18 +27,57 @@ export default function TasksView({ clientId }: TasksViewProps) {
   const deleteTask = useDeleteTask(clientId);
   const { toast } = useToast();
   const paths = clientApiPaths(clientId);
+  const queryClient = useQueryClient();
 
-  const goToToday = () => { setCurrentDate(new Date()); setReport(null); };
-  const prevDay = () => { setCurrentDate(subDays(currentDate, 1)); setReport(null); };
-  const nextDay = () => { setCurrentDate(addDays(currentDate, 1)); setReport(null); };
+  const reportQueryKey = [paths.reports.byDate, dateStr];
+
+  const { data: savedReport, isLoading: isLoadingReport } = useQuery<Report | null>({
+    queryKey: reportQueryKey,
+    queryFn: async () => {
+      const res = await fetch(`${paths.reports.byDate}?date=${encodeURIComponent(dateStr)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch report");
+      return res.json();
+    },
+  });
+
+  const updateReportMutation = useMutation({
+    mutationFn: async ({ id, content }: { id: number; content: string }) => {
+      const res = await apiRequest("PATCH", paths.reports.update(id), { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reportQueryKey });
+      setIsEditing(false);
+      toast({ title: "Saved", description: "Report updated successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteReportMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", paths.reports.delete(id));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reportQueryKey });
+      toast({ title: "Deleted", description: "Report deleted." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const goToToday = () => { setCurrentDate(new Date()); setIsEditing(false); };
+  const prevDay = () => { setCurrentDate(subDays(currentDate, 1)); setIsEditing(false); };
+  const nextDay = () => { setCurrentDate(addDays(currentDate, 1)); setIsEditing(false); };
 
   const handleGenerateReport = async () => {
     setIsGenerating(true);
-    setReport(null);
     try {
       const res = await apiRequest("POST", paths.tasks.report, { date: dateStr });
-      const data = await res.json();
-      setReport(data.report);
+      await res.json();
+      queryClient.invalidateQueries({ queryKey: reportQueryKey });
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to generate report", variant: "destructive" });
     } finally {
@@ -68,6 +109,28 @@ export default function TasksView({ clientId }: TasksViewProps) {
 
   const handleDelete = (task: Task) => {
     deleteTask.mutate({ id: task.id, date: task.date });
+  };
+
+  const startEditing = () => {
+    if (savedReport) {
+      setEditContent(savedReport.content);
+      setIsEditing(true);
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditContent("");
+  };
+
+  const saveEdit = () => {
+    if (!savedReport || !editContent.trim()) return;
+    updateReportMutation.mutate({ id: savedReport.id, content: editContent.trim() });
+  };
+
+  const handleDeleteReport = () => {
+    if (!savedReport) return;
+    deleteReportMutation.mutate(savedReport.id);
   };
 
   const isToday = format(new Date(), "yyyy-MM-dd") === dateStr;
@@ -188,14 +251,77 @@ export default function TasksView({ clientId }: TasksViewProps) {
               ) : (
                 <>
                   <FileText className="w-4 h-4 mr-2" />
-                  Generate AI Report
+                  {savedReport ? "Regenerate AI Report" : "Generate AI Report"}
                 </>
               )}
             </Button>
+          </div>
+        )}
 
-            {report && (
-              <div data-testid="text-ai-report" className="mt-4 p-4 rounded-md bg-muted text-sm leading-relaxed whitespace-pre-wrap">
-                {report}
+        {isLoadingReport ? (
+          <div className="mt-4 text-center text-muted-foreground text-sm">Loading report...</div>
+        ) : savedReport && (
+          <div data-testid="report-section" className="mt-4 border border-border rounded-md bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/40">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-semibold text-muted-foreground">AI Report</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {isEditing ? (
+                  <>
+                    <Button
+                      data-testid="button-save-report"
+                      size="sm"
+                      variant="ghost"
+                      onClick={saveEdit}
+                      disabled={updateReportMutation.isPending || !editContent.trim()}
+                    >
+                      {updateReportMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      data-testid="button-cancel-edit-report"
+                      size="sm"
+                      variant="ghost"
+                      onClick={cancelEditing}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      data-testid="button-edit-report"
+                      size="sm"
+                      variant="ghost"
+                      onClick={startEditing}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      data-testid="button-delete-report"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleDeleteReport}
+                      disabled={deleteReportMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {isEditing ? (
+              <textarea
+                data-testid="textarea-edit-report"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full p-4 text-sm leading-relaxed bg-background border-0 focus:outline-none focus:ring-0 resize-y min-h-[120px]"
+              />
+            ) : (
+              <div data-testid="text-ai-report" className="p-4 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                {savedReport.content}
               </div>
             )}
           </div>

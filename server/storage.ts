@@ -19,7 +19,9 @@ export interface IStorage {
   updateTask(clientId: number, id: number, updates: { title?: string; completed?: boolean }): Promise<Task | null>;
   deleteTask(clientId: number, id: number): Promise<boolean>;
   getReports(clientId: number, month?: string): Promise<Report[]>;
+  getReportByDate(clientId: number, date: string): Promise<Report | undefined>;
   createReport(data: InsertReport): Promise<Report>;
+  updateReport(clientId: number, id: number, content: string): Promise<Report | null>;
   deleteReport(clientId: number, id: number): Promise<boolean>;
 }
 
@@ -125,9 +127,20 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(reports).where(eq(reports.clientId, clientId)).orderBy(reports.date);
   }
 
+  async getReportByDate(clientId: number, date: string): Promise<Report | undefined> {
+    const [report] = await db.select().from(reports)
+      .where(and(eq(reports.clientId, clientId), eq(reports.date, date)));
+    return report;
+  }
+
   async createReport(data: InsertReport): Promise<Report> {
     const [inserted] = await db.insert(reports).values(data).returning();
     return inserted;
+  }
+
+  async updateReport(clientId: number, id: number, content: string): Promise<Report | null> {
+    const result = await db.update(reports).set({ content }).where(and(eq(reports.id, id), eq(reports.clientId, clientId))).returning();
+    return result.length > 0 ? result[0] : null;
   }
 
   async deleteReport(clientId: number, id: number): Promise<boolean> {

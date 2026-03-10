@@ -86,7 +86,8 @@ Preferred communication style: Simple, everyday language.
   ├── clientId   integer NOT NULL (FK → clients.id, CASCADE)
   ├── date       date NOT NULL
   ├── content    text NOT NULL
-  └── createdAt  timestamp
+  ├── createdAt  timestamp
+  └── UNIQUE(clientId, date)
   ```
 
 ### API Design
@@ -112,8 +113,10 @@ Preferred communication style: Simple, everyday language.
 | POST | `/api/clients/:clientId/tasks` | Yes | Create a task |
 | PATCH | `/api/clients/:clientId/tasks/:id` | Yes | Update a task |
 | DELETE | `/api/clients/:clientId/tasks/:id` | Yes | Delete a task |
-| POST | `/api/clients/:clientId/tasks/report` | Yes | Generate AI report (uses user's OpenAI key, writes in client's language) |
+| POST | `/api/clients/:clientId/tasks/report` | Yes | Generate AI report (upserts, uses user's OpenAI key, writes in client's language) |
 | GET | `/api/clients/:clientId/reports?month=YYYY-MM` | Yes | List reports for a month |
+| GET | `/api/clients/:clientId/report-by-date?date=YYYY-MM-DD` | Yes | Get report for a specific date |
+| PATCH | `/api/clients/:clientId/reports/:id` | Yes | Update a report's content |
 | DELETE | `/api/clients/:clientId/reports/:id` | Yes | Delete a report |
 
 ### Shared Code

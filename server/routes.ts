@@ -267,7 +267,13 @@ export async function registerRoutes(
       });
 
       const reportContent = completion.choices[0]?.message?.content || "Unable to generate report.";
-      const saved = await storage.createReport({ clientId, date, content: reportContent });
+      const existing = await storage.getReportByDate(clientId, date);
+      let saved;
+      if (existing) {
+        saved = await storage.updateReport(clientId, existing.id, reportContent);
+      } else {
+        saved = await storage.createReport({ clientId, date, content: reportContent });
+      }
       res.json({ report: reportContent, saved });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -281,6 +287,22 @@ export async function registerRoutes(
     }
   });
 
+  // Get report for a specific date
+  app.get("/api/clients/:clientId/report-by-date", isAuthenticated, async (req, res) => {
+    try {
+      const clientId = Number(req.params.clientId);
+      if (isNaN(clientId)) return res.status(400).json({ message: "Invalid client ID" });
+      const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
+      const report = await storage.getReportByDate(clientId, date);
+      res.json(report || null);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
   // Reports routes (scoped by client)
   app.get("/api/clients/:clientId/reports", isAuthenticated, async (req, res) => {
     try {
@@ -291,6 +313,23 @@ export async function registerRoutes(
       }).parse(req.query);
       const data = await storage.getReports(clientId, input.month);
       res.json(data);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.patch("/api/clients/:clientId/reports/:id", isAuthenticated, async (req, res) => {
+    try {
+      const clientId = Number(req.params.clientId);
+      const id = Number(req.params.id);
+      if (isNaN(clientId) || isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { content } = z.object({ content: z.string().min(1) }).parse(req.body);
+      const result = await storage.updateReport(clientId, id, content);
+      if (!result) return res.status(404).json({ message: "Report not found" });
+      res.json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });

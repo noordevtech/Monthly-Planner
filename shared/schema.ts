@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, date, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, date, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -34,7 +34,7 @@ export const reports = pgTable("reports", {
   date: date("date").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [uniqueIndex("reports_client_date_unique").on(table.clientId, table.date)]);
 
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true, createdAt: true });
 export const insertTimeSlotSchema = createInsertSchema(timeSlots).omit({ id: true });

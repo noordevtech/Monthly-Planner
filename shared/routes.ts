@@ -16,6 +16,8 @@ export function clientApiPaths(clientId: number) {
     },
     reports: {
       list: `${base}/reports`,
+      byDate: `${base}/report-by-date`,
+      update: (id: number) => `${base}/reports/${id}`,
       delete: (id: number) => `${base}/reports/${id}`,
     },
   };
