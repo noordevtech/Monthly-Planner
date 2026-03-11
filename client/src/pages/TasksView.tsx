@@ -321,7 +321,15 @@ export default function TasksView({ clientId }: TasksViewProps) {
               />
             ) : (
               <div data-testid="text-ai-report" className="p-4 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-                {savedReport.content}
+                {savedReport.content.split('\n').map((line, i) => {
+                  if (line.trim() === '---') {
+                    return <hr key={i} className="my-3 border-border" />;
+                  }
+                  const boldParsed = line.split(/\*\*(.*?)\*\*/).map((part, j) =>
+                    j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+                  );
+                  return <span key={i}>{boldParsed}{'\n'}</span>;
+                })}
               </div>
             )}
           </div>
