@@ -268,7 +268,7 @@ export async function registerRoutes(
 
       const aiSummary = completion.choices[0]?.message?.content || "Unable to generate report.";
 
-      const formattedTaskList = tasks.map(t => `- [${t.completed ? "✓" : "○"}] ${t.title}`).join("\n");
+      const formattedTaskList = tasks.map(t => `${t.completed ? "✅" : "•"} ${t.title}`).join("\n");
       const reportContent = `${aiSummary}\n\n---\n\n**Tasks:**\n${formattedTaskList}`;
 
       const existing = await storage.getReportByDate(clientId, date);
