@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Circle, FileText, Loader2, Pencil, X, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Circle, FileText, Loader2, Pencil, X, Save, Copy, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ export default function TasksView({ clientId }: TasksViewProps) {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [editContent, setEditContent] = useState("");
 
   const dateStr = format(currentDate, "yyyy-MM-dd");
@@ -131,6 +132,34 @@ export default function TasksView({ clientId }: TasksViewProps) {
   const handleDeleteReport = () => {
     if (!savedReport) return;
     deleteReportMutation.mutate(savedReport.id);
+  };
+
+  const handleCopyReport = async () => {
+    if (!savedReport) return;
+    const content = savedReport.content;
+    const html = content
+      .split('\n')
+      .map(line => {
+        if (line.trim() === '---') return '<hr>';
+        const withBold = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        return `<p style="margin:0 0 4px 0">${withBold}</p>`;
+      })
+      .join('');
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([content.replace(/\*\*/g, '')], { type: 'text/plain' }),
+        }),
+      ]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      await navigator.clipboard.writeText(content.replace(/\*\*/g, ''));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const isToday = format(new Date(), "yyyy-MM-dd") === dateStr;
@@ -290,6 +319,14 @@ export default function TasksView({ clientId }: TasksViewProps) {
                   </>
                 ) : (
                   <>
+                    <Button
+                      data-testid="button-copy-report"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleCopyReport}
+                    >
+                      {copied ? <CheckCheck className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    </Button>
                     <Button
                       data-testid="button-edit-report"
                       size="sm"
