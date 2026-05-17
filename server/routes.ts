@@ -14,7 +14,7 @@ export async function registerRoutes(
 
   // Settings route for OpenAI API key
   app.get("/api/settings", isAuthenticated, async (req: any, res) => {
-    const userId = req.user?.claims?.sub;
+    const userId = req.user?.id;
     const user = await storage.getUserById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json({ hasOpenaiKey: !!user.openaiApiKey });
@@ -22,7 +22,7 @@ export async function registerRoutes(
 
   app.patch("/api/settings", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.user?.id;
       const input = z.object({
         openaiApiKey: z.string().nullable(),
       }).parse(req.body);
@@ -236,7 +236,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No tasks found for this date" });
       }
 
-      const userId = req.user?.claims?.sub;
+      const userId = req.user?.id;
       const user = await storage.getUserById(userId);
       if (!user?.openaiApiKey) {
         return res.status(400).json({ message: "Please add your OpenAI API key in Settings before generating reports" });

@@ -1,10 +1,11 @@
 import { Switch, Route, Link, useLocation, useRoute } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Calendar, ListTodo, FileText, ArrowLeft, LogOut, Settings, KeyRound } from "lucide-react";
+import { Calendar, ListTodo, FileText, ArrowLeft, LogOut, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import NotFound from "@/pages/not-found";
 import ClientsView from "@/pages/ClientsView";
 import CalendarView from "@/pages/CalendarView";
@@ -15,24 +16,87 @@ import { useAuth } from "@/hooks/use-auth";
 import { type Client } from "@shared/schema";
 
 function LandingPage() {
+  const qc = useQueryClient();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || "Invalid email or password");
+      } else {
+        qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      }
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md mx-4 text-center">
+      <div className="w-full max-w-sm mx-4">
         <div className="flex items-center justify-center gap-3 mb-8">
           <Calendar className="w-10 h-10 text-primary" />
           <h1 className="text-3xl font-bold text-foreground">Work Calendar</h1>
         </div>
-        <p className="text-muted-foreground mb-8 text-lg">
-          Manage your clients, track work hours, and generate AI-powered daily reports.
-        </p>
-        <a
-          href="/api/login"
-          data-testid="button-login"
-          className="inline-flex items-center gap-2 px-8 py-3 rounded-md bg-primary text-primary-foreground font-medium text-lg hover:bg-primary/90 transition-colors"
-        >
-          <KeyRound className="w-5 h-5" />
-          Sign In with Replit
-        </a>
+        <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-foreground mb-1">Sign in</h2>
+          <p className="text-sm text-muted-foreground mb-5">Enter your credentials to continue</p>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Email</label>
+              <input
+                data-testid="input-email"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                className="px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Password</label>
+              <input
+                data-testid="input-password"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                className="px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="••••••••"
+              />
+            </div>
+            {error && (
+              <p data-testid="text-login-error" className="text-sm text-destructive">{error}</p>
+            )}
+            <Button
+              data-testid="button-login"
+              type="submit"
+              className="w-full"
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Sign In
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

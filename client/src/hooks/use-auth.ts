@@ -58,12 +58,18 @@ export function useAuth() {
     },
   });
 
+  const logout = async () => {
+    await fetch("/api/logout", { method: "POST", credentials: "include" });
+    queryClient.clear();
+    window.location.href = "/";
+  };
+
   return {
     user: user ?? null,
     isLoading,
     isAuthenticated: !!user,
     hasOpenaiKey: settings?.hasOpenaiKey ?? false,
     updateSettings,
-    logout: () => { window.location.href = "/api/logout"; },
+    logout,
   };
 }
