@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { pool } from "./db";
+import bcrypt from "bcryptjs";
 
 const app = express();
 const httpServer = createServer(app);
@@ -60,6 +62,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ensure password_hash column exists and default user has a password set
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text`);
+    const hash = await bcrypt.hash("Zakialove1984med@", 12);
+    await pool.query(
+      `UPDATE users SET password_hash = $1 WHERE email = 'info@noordev.com' AND password_hash IS NULL`,
+      [hash]
+    );
+  } catch (err) {
+    console.error("Startup migration error:", err);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
