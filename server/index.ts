@@ -1,3 +1,12 @@
+process.on("uncaughtException", (err) => {
+  console.error("STARTUP uncaughtException:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("STARTUP unhandledRejection:", err);
+  process.exit(1);
+});
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
